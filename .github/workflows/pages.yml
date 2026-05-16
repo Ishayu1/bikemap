@@ -1,0 +1,74 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v4
+
+      - name: Publish folder (exclude git + workflows)
+        run: |
+          python3 - <<'PY'
+          import shutil
+          from pathlib import Path
+
+          root = Path(".")
+          out = Path("publish")
+          if out.exists():
+              shutil.rmtree(out)
+          out.mkdir()
+
+          skip = {".git", ".github", "publish"}
+          for p in root.iterdir():
+              if p.name in skip:
+                  continue
+              dst = out / p.name
+              if p.is_dir():
+                  shutil.copytree(p, dst)
+              else:
+                  shutil.copy2(p, dst)
+          PY
+
+      - name: Inject Mapbox public token (never committed)
+        env:
+          MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          tok = os.environ.get("MAPBOX_PUBLIC_TOKEN", "").strip()
+          path = Path("publish/mapbox-token.local.js")
+
+          # Create file only when secret exists; otherwise banner in map.js explains next steps.
+          if tok:
+              path.write_text(f"export default {tok!r};\n", encoding="utf-8")
+              print("Injected MAPBOX_PUBLIC_TOKEN into publish/mapbox-token.local.js")
+          else:
+              print("Skip token inject: MAPBOX_PUBLIC_TOKEN repo secret missing")
+          PY
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -9,16 +9,9 @@ async function resolveMapboxAccessToken() {
     const token = typeof mod.default === 'string' ? mod.default.trim() : '';
     if (token && token !== TOKEN_PLACEHOLDER) return token;
   } catch {
-    /* e.g. no local overrides on GitHub Pages */
-  }
 
-  try {
-    const mod = await import('./mapbox-token.defaults.js');
-    const token = typeof mod.default === 'string' ? mod.default.trim() : '';
-    return token;
-  } catch {
-    return '';
   }
+  return '';
 }
 
 const stationFlow = d3.scaleQuantize().domain([0, 1]).range([0, 0.5, 1]);
@@ -76,12 +69,12 @@ async function bootstrap() {
 
   if (missingToken) {
     console.warn(
-      'Mapbox token missing or placeholder. Copy mapbox-token.js.example → mapbox-token.local.js with your pk… token.',
+      'Mapbox token missing. Create mapbox-token.local.js exporting your pk… token (see .github/workflows/pages.yml).',
     );
     const bar = document.createElement('div');
     bar.role = 'alert';
     bar.textContent =
-      'Missing Mapbox public token — copy mapbox-token.js.example to mapbox-token.local.js and paste your pk… token.';
+      'Missing Mapbox public token — add mapbox-token.local.js locally, or MAPBOX_PUBLIC_TOKEN in GitHub repo secrets + Pages workflow.';
     Object.assign(bar.style, {
       position: 'fixed',
       top: '0',
