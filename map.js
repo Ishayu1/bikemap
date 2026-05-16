@@ -96,7 +96,7 @@ async function bootstrap() {
   }
 
   const map = new mapboxgl.Map({
-    container: 'map',
+    container: 'map-canvas-root',
     style: 'mapbox://styles/mapbox/streets-v12',
     center: [-71.09415, 42.36027],
     zoom: 12,
