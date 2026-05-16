@@ -1,0 +1,56 @@
+body {
+  font: 100%/1.5 system-ui, sans-serif;
+  display: flex;
+  flex-flow: column;
+  max-width: 80em;
+  min-height: 100vh;
+  box-sizing: border-box;
+  margin: auto;
+  padding: 1em;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+#time-filter-label {
+  margin-left: auto;
+  cursor: pointer;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+#time-filter-label input[type='range'] {
+  min-width: 140px;
+  vertical-align: middle;
+}
+
+#selected-time {
+  font-variant-numeric: tabular-nums;
+  min-width: 5.5ch;
+}
+
+#any-time {
+  color: #666;
+  font-style: italic;
+}

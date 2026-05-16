@@ -1,0 +1,4 @@
+// Copy this file to mapbox-token.js and replace the string with your
+// Mapbox public access token from https://account.mapbox.com/access-tokens/
+
+export default 'YOUR_MAPBOX_PUBLIC_TOKEN';
