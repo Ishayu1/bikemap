@@ -40,23 +40,26 @@ function minutesSinceMidnight(date) {
   return date.getHours() * 60 + date.getMinutes();
 }
 
-function filterByMinute(tripsByMinute, minute) {
-  if (minute === -1) {
-    return tripsByMinute.flat(); // No filtering, return all trips
+/** Prefix sums over 1440 minutes: pref[i] = sum(hist[0..i-1]), pref[1440] = total */
+function minuteHistogramToPrefix(hist) {
+  const pref = new Uint32Array(1441);
+  for (let i = 0; i < 1440; i++) {
+    pref[i + 1] = pref[i] + hist[i];
   }
+  return pref;
+}
 
-  // Normalize both min and max minutes to the valid range [0, 1439]
-  let minMinute = (minute - 60 + 1440) % 1440;
-  let maxMinute = (minute + 60) % 1440;
-
-  // Handle time filtering across midnight
-  if (minMinute > maxMinute) {
-    let beforeMidnight = tripsByMinute.slice(minMinute);
-    let afterMidnight = tripsByMinute.slice(0, maxMinute);
-    return beforeMidnight.concat(afterMidnight).flat();
+/**
+ * Trip counts in the same time window as Lab 7 filterByMinute (half-open minute ranges).
+ */
+function countTripsInTimeWindow(pref, centerMinute) {
+  if (!pref) return 0;
+  const minM = (centerMinute - 60 + 1440) % 1440;
+  const maxM = (centerMinute + 60) % 1440;
+  if (minM > maxM) {
+    return pref[1440] - pref[minM] + pref[maxM];
   }
-
-  return tripsByMinute.slice(minMinute, maxMinute).flat();
+  return pref[maxM] - pref[minM];
 }
 
 async function bootstrap() {
@@ -109,37 +112,30 @@ async function bootstrap() {
 
   const svg = d3.select('#map').select('svg');
 
-  let departuresByMinute = Array.from({ length: 1440 }, () => []);
-  let arrivalsByMinute = Array.from({ length: 1440 }, () => []);
+  /** Per-station departure/arrival counts by minute-of-day, then prefix sums for O(1) window queries */
+  let departurePrefixByStation = new Map();
+  let arrivalPrefixByStation = new Map();
 
   let allDepartures;
   let allArrivals;
 
   function computeStationTraffic(stations, timeFilter = -1) {
-    let departures;
-    let arrivals;
-
     if (timeFilter === -1 && allDepartures && allArrivals) {
-      departures = allDepartures;
-      arrivals = allArrivals;
-    } else {
-      departures = d3.rollup(
-        filterByMinute(departuresByMinute, timeFilter),
-        (v) => v.length,
-        (d) => d.start_station_id,
-      );
-
-      arrivals = d3.rollup(
-        filterByMinute(arrivalsByMinute, timeFilter),
-        (v) => v.length,
-        (d) => d.end_station_id,
-      );
+      return stations.map((station) => {
+        const id = station.short_name;
+        station.arrivals = allArrivals.get(id) ?? 0;
+        station.departures = allDepartures.get(id) ?? 0;
+        station.totalTraffic = station.arrivals + station.departures;
+        return station;
+      });
     }
 
     return stations.map((station) => {
-      let id = station.short_name;
-      station.arrivals = arrivals.get(id) ?? 0;
-      station.departures = departures.get(id) ?? 0;
+      const id = station.short_name;
+      const depPref = departurePrefixByStation.get(id);
+      const arrPref = arrivalPrefixByStation.get(id);
+      station.departures = countTripsInTimeWindow(depPref, timeFilter);
+      station.arrivals = countTripsInTimeWindow(arrPref, timeFilter);
       station.totalTraffic = station.arrivals + station.departures;
       return station;
     });
@@ -186,16 +182,41 @@ async function bootstrap() {
       (trip) => {
         trip.started_at = new Date(trip.started_at);
         trip.ended_at = new Date(trip.ended_at);
-
-        let startedMinutes = minutesSinceMidnight(trip.started_at);
-        departuresByMinute[startedMinutes].push(trip);
-
-        let endedMinutes = minutesSinceMidnight(trip.ended_at);
-        arrivalsByMinute[endedMinutes].push(trip);
-
         return trip;
       },
     );
+
+    const departureHist = new Map();
+    const arrivalHist = new Map();
+
+    function bumpHist(map, stationId, minute) {
+      let h = map.get(stationId);
+      if (!h) {
+        h = new Uint32Array(1440);
+        map.set(stationId, h);
+      }
+      h[minute]++;
+    }
+
+    for (const s of jsonData.data.stations) {
+      const id = s.short_name;
+      if (!departureHist.has(id)) departureHist.set(id, new Uint32Array(1440));
+      if (!arrivalHist.has(id)) arrivalHist.set(id, new Uint32Array(1440));
+    }
+
+    for (const trip of trips) {
+      bumpHist(departureHist, trip.start_station_id, minutesSinceMidnight(trip.started_at));
+      bumpHist(arrivalHist, trip.end_station_id, minutesSinceMidnight(trip.ended_at));
+    }
+
+    departurePrefixByStation = new Map();
+    arrivalPrefixByStation = new Map();
+    for (const [id, hist] of departureHist) {
+      departurePrefixByStation.set(id, minuteHistogramToPrefix(hist));
+    }
+    for (const [id, hist] of arrivalHist) {
+      arrivalPrefixByStation.set(id, minuteHistogramToPrefix(hist));
+    }
 
     allDepartures = d3.rollup(
       trips,
